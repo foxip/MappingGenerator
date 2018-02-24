@@ -52,6 +52,9 @@ namespace MappingGenerator
                 case YieldStatementSyntax yieldStatement:
                     context.RegisterCodeFix(CodeAction.Create(title: title, createChangedDocument: c => GenerateExplicitConversion(context.Document, yieldStatement, c), equivalenceKey: title), diagnostic);
                     break;
+                case LocalDeclarationStatementSyntax localDeclarationStatement:
+                    context.RegisterCodeFix(CodeAction.Create(title: title, createChangedDocument: c => GenerateExplicitConversion(context.Document, localDeclarationStatement, c), equivalenceKey: title), diagnostic);
+                    break;
             }
         }
 
@@ -86,6 +89,16 @@ namespace MappingGenerator
             return await ReplaceStatement(document, yieldStatement, mappingStatements, cancellationToken);
         }
 
+        private async Task<Document> GenerateExplicitConversion(Document document, LocalDeclarationStatementSyntax localDeclarationStatement, CancellationToken cancellationToken)
+        {
+            var semanticModel = await document.GetSemanticModelAsync(cancellationToken);
+            var generator = SyntaxGenerator.GetGenerator(document);
+            var initializeExpression = localDeclarationStatement.Declaration.Variables.First().Initializer.Value;
+            var yieldExpressionType = semanticModel.GetTypeInfo(initializeExpression);
+            var mappingStatements = MappingGenerator.MapTypes(yieldExpressionType.Type, yieldExpressionType.ConvertedType, generator, initializeExpression, targetExists:true);
+            return await ReplaceStatement(document, localDeclarationStatement, mappingStatements, cancellationToken);
+        }
+
         private static async Task<Document> ReplaceStatement(Document document, SyntaxNode statement, IEnumerable<SyntaxNode> newStatements, CancellationToken cancellationToken)
         {
             var root = await document.GetSyntaxRootAsync(cancellationToken);
@@ -105,6 +118,8 @@ namespace MappingGenerator
                         return returnStatement;
                     case YieldStatementSyntax yieldStatement:
                         return yieldStatement;
+                    case LocalDeclarationStatementSyntax localDeclarationStatement:
+                        return localDeclarationStatement;
                     default:
                         return node.Parent == null? null: FindStatementToReplace(node.Parent);
             }
